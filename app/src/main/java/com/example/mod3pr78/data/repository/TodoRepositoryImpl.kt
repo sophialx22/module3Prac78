@@ -1,23 +1,69 @@
 package com.example.mod3pr78.data.repository
+
+import com.example.mod3pr78.data.local.TodoDatabase
+import com.example.mod3pr78.data.local.TodoJsonDataSource
+import com.example.mod3pr78.data.model.TodoItemEntity
 import com.example.mod3pr78.domain.model.TodoItem
 import com.example.mod3pr78.domain.repository.TodoRepository
-import com.example.mod3pr78.data.local.TodoJsonDataSource
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
 
-class TodoRepositoryImpl(private val dataSource: TodoJsonDataSource) : TodoRepository {
-    private var todosCache = mutableListOf<TodoItem>()
-    override suspend fun getTodos(): List<TodoItem> {
-        if (todosCache.isEmpty()) {
-            todosCache = dataSource.getTodos().map { dto ->
-                TodoItem(dto.id, dto.title, dto.description, dto.isCompleted)
-            }.toMutableList()
+class TodoRepositoryImpl(
+    private val context: android.content.Context,
+    private val jsonDataSource: TodoJsonDataSource
+) : TodoRepository {
+
+    private val database = TodoDatabase.getDatabase(context)
+    private val dao = database.todoDao()
+
+    override fun getTodos(): Flow<List<TodoItem>> {
+        return dao.getAllTodos().map { entities ->
+            entities.map { it.toDomain() }
         }
-        return todosCache
     }
+
+    override suspend fun addTodo(todo: TodoItem) {
+        dao.insertTodo(todo.toEntity())
+    }
+
+    override suspend fun updateTodo(todo: TodoItem) {
+        dao.updateTodo(todo.toEntity())
+    }
+
+    override suspend fun deleteTodo(todo: TodoItem) {
+        dao.deleteTodo(todo.toEntity())
+    }
+
     override suspend fun toggleTodo(id: Int) {
-        val index = todosCache.indexOfFirst { it.id == id }
-        if (index != -1) {
-            val old = todosCache[index]
-            todosCache[index] = old.copy(isCompleted = !old.isCompleted)
+        val todo = dao.getTodoById(id)
+        todo?.let {
+            dao.updateTodo(it.copy(isCompleted = !it.isCompleted))
         }
+    }
+
+    override suspend fun importInitialTodos() {
+        val existingTodos = dao.getAllTodos().firstOrNull()
+        if (existingTodos.isNullOrEmpty()) {
+            jsonDataSource.importTodosToDatabase()
+        }
+    }
+
+    private fun TodoItemEntity.toDomain(): TodoItem {
+        return TodoItem(
+            id = id,
+            title = title,
+            description = description,
+            isCompleted = isCompleted
+        )
+    }
+
+    private fun TodoItem.toEntity(): TodoItemEntity {
+        return TodoItemEntity(
+            id = id,
+            title = title,
+            description = description,
+            isCompleted = isCompleted
+        )
     }
 }

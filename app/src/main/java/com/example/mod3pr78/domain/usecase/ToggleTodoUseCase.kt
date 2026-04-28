@@ -1,4 +1,5 @@
 package com.example.mod3pr78.domain.usecase
+
 import com.example.mod3pr78.domain.repository.TodoRepository
 
 class ToggleTodoUseCase(private val repository: TodoRepository) {
